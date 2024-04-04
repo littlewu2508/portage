@@ -33,7 +33,7 @@ install_qa_check_prefix() {
 
 	# check shebangs, bug #282539
 	rm -f "${T}"/non-prefix-shebangs-errs
-	local WHITELIST=" /usr/bin/env "
+	local WHITELIST=""
 	# this is hell expensive, but how else?
 	find "${ED}" -executable \! -type d -print0 \
 			| xargs -0 grep -H -n -m1 "^#!" \
@@ -76,29 +76,22 @@ install_qa_check_prefix() {
 			fi
 			continue
 		fi
-		# unprefixed shebang, is the script directly in ${PATH} or an init script?
-		if [[ ":${PATH}:${EPREFIX}/etc/init.d:" == *":${fp}:"* ]] ; then
-			if [[ -e ${EROOT}${line[0]} || -e ${ED}${line[0]} ]] ; then
-				# is it unprefixed, but we can just fix it because a
-				# prefixed variant exists
-				eqawarn "QA Notice:  prefixing shebang of ${fn#${D}}"
-				# statement is made idempotent on purpose, because
-				# symlinks may point to the same target, and hence the
-				# same real file may be sedded multiple times since we
-				# read the shebangs in one go upfront for performance
-				# reasons
-				sed -i -e '1s:^#! \?'"${line[0]}"':#!'"${EPREFIX}"${line[0]}':' "${rf}"
-				continue
-			else
-				# this is definitely wrong: script in ${PATH} and invalid shebang
-				echo "${fn#${D}}:${line[0]} (script ${fn##*/} installed in PATH but interpreter ${line[0]} not found)" \
-					>> "${T}"/non-prefix-shebangs-errs
-			fi
+		# unprefixed shebang, prefixify it!
+		if [[ -e ${EROOT}${line[0]} || -e ${ED}${line[0]} ]] ; then
+			# is it unprefixed, but we can just fix it because a
+			# prefixed variant exists
+			eqawarn "QA Notice:  prefixing shebang of ${fn#${D}}"
+			# statement is made idempotent on purpose, because
+			# symlinks may point to the same target, and hence the
+			# same real file may be sedded multiple times since we
+			# read the shebangs in one go upfront for performance
+			# reasons
+			sed -i -e '1s:^#! \?'"${line[0]}"':#!'"${EPREFIX}"${line[0]}':' "${rf}"
+			continue
 		else
-			# unprefixed/invalid shebang, but outside ${PATH}, this may be
-			# intended (e.g. config.guess) so remain silent by default
-			has stricter ${FEATURES} && \
-				eqawarn "QA Notice: invalid shebang in ${fn#${D}}: ${line[0]}"
+			# this is definitely wrong: script in ${PATH} and invalid shebang
+			echo "${fn#${D}}:${line[0]} (script ${fn##*/} installed in PATH but interpreter ${line[0]} not found)" \
+				>> "${T}"/non-prefix-shebangs-errs
 		fi
 	done
 	if [[ -e "${T}"/non-prefix-shebangs-errs ]] ; then
